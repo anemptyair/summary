@@ -1,0 +1,60 @@
+---
+apiVersion: "config.istio.io/v1alpha2"
+kind: rule
+metadata:
+  name: checkblacklist
+  namespace: istio-system
+spec:
+  match: destination.labels["app"] == "hp-softwareupdate"
+  actions:
+  - handler: blacklisthandler
+    instances:
+    - authorizationheader
+---
+apiVersion: "config.istio.io/v1alpha2"
+kind: instance
+metadata:
+  name: authorizationheader
+  namespace: istio-system
+spec:
+  compiledTemplate: authorization
+  params:
+    subject:
+      user: source.principal | request.auth.principal | ""
+      groups: request.auth.claims["groups"] | ""
+      properties:
+        iss: request.auth.claims["iss"]
+    action:
+      namespace: destination.namespace | "default"
+      service: destination.service.host | ""
+      path: request.path | "/"
+      method: request.method | "post"
+      properties:
+        token: request.headers["authorization"] | ""
+---
+apiVersion: "config.istio.io/v1alpha2"
+kind: handler
+metadata:
+  name: blacklisthandler
+  namespace: istio-system
+spec:
+  compiledAdapter: opa
+  policy:
+    - |+
+      package mixerauthz
+      # Deny request by default.
+      default allow = false
+      allow{
+            not_blacked
+       }
+      not_blacked {
+        blackItem := {signature | signature := blacklist[_]; signature == input.action.properties.token}
+        count(blackItem) == 0
+        }
+      blacklist[signatures] {
+         response:=http.send({"method": "get", "url": "hp-oauth-service.hp/oauth/api/v1/blacklist/access"})
+         signatures=response.blacklist[_].signature
+       }
+  checkMethod: "data.mixerauthz.allow"
+  failClose: true
+---
