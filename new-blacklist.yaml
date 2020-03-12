@@ -18,19 +18,19 @@ metadata:
   namespace: istio-system
 spec:
   compiledTemplate: authorization
-  params:
-    subject:
-      user: source.principal | request.auth.principal | ""
-      groups: request.auth.claims["groups"] | ""
-      properties:
-        iss: request.auth.claims["iss"]
-    action:
-      namespace: destination.namespace | "default"
-      service: destination.service.host | ""
-      path: request.path | "/"
-      method: request.method | "post"
-      properties:
-        token: request.headers["authorization"] | ""
+  subject:
+    user: request.auth.principal | ""
+    groups: request.auth.principal | ""
+    properties:
+      service: source.services | ""
+      namespace: source.namespace | ""
+  action:
+    namespace: destination.namespace | ""
+    service: destination.service.host | ""
+    method: request.method | ""
+    path: request.path | ""
+    properties:
+      token: request.headers["authorization"] | ""
 ---
 apiVersion: "config.istio.io/v1alpha2"
 kind: handler
@@ -52,8 +52,8 @@ spec:
         count(blackItem) == 0
         }
       blacklist[signatures] {
-         response:=http.send({"method": "get", "url": "hp-oauth-service.hp/oauth/api/v1/blacklist/access"})
-         signatures=response.blacklist[_].signature
+         response:=http.send({"method": "get", "url": "http://hp-oauth-service.hp/oauth/api/v1/blacklist/access"})
+         signatures=response.body.blacklist[_].signature
        }
   checkMethod: "data.mixerauthz.allow"
   failClose: true
