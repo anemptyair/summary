@@ -1,0 +1,57 @@
+apiVersion: "config.istio.io/v1alpha2"
+kind: authorization
+metadata:
+  name: jwtrequest
+  namespace: istio-system
+spec:
+  subject:
+    user: request.auth.principal | ""
+    groups: request.auth.principal | ""
+    properties:
+      service: source.services | ""
+      namespace: source.namespace | ""
+  action:
+    namespace: destination.namespace | ""
+    service: destination.service.host | ""
+    method: request.method | ""
+    path: request.path | ""
+    properties:
+      token: request.headers["authorization"] | ""
+---
+apiVersion: "config.istio.io/v1alpha2"
+kind: rule
+metadata:
+  name: jwtauthorization
+  namespace: istio-system
+spec:
+  match: destination.labels["app"] == "hp-softwareupdate"
+  actions:
+  - handler: jwthandler.opa
+    instances:
+    - jwtrequest.authorization
+---
+apiVersion: "config.istio.io/v1alpha2"
+kind: opa
+metadata:
+  name: jwthandler
+  namespace: istio-system
+spec:
+  policy:
+    - |+
+      package mixerauthz
+      # Deny request by default.
+      default allow = false
+      allow{
+          not_blacked
+      }
+      not_blacked {
+         blackItem := {signature | signature := blacklist[_]; signature == input.action.properties.token}
+         count(blackItem) == 0
+      }
+      blacklist[signatures] {
+         response:=http.send({"method": "get", "url": "http://hp-softwareupdate-service.hp/softwareupdate/api/v1/artifacts"})
+         signatures:=response.body.delaware[_].chartversion
+      }
+  checkMethod: "data.mixerauthz.allow"
+  failClose: true
+---
