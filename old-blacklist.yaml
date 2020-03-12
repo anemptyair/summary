@@ -1,35 +1,11 @@
 ---
 apiVersion: "config.istio.io/v1alpha2"
-kind: attributemanifest
-metadata:
-  name: istio-proxy
-  namespace: default
-spec:
-  attributes:
-    source.uid:
-      value_type: STRING
-    source.groups:
-      value_type: STRING
-    destination.namespace:
-      value_type: STRING
-    destination.service:
-      value_type: STRING
-    request.method:
-      value_type: STRING
-    request.path:
-      value_type: STRING
-    source.service:
-      value_type: STRING
-    destination.service:
-      value_type: STRING
----
-apiVersion: "config.istio.io/v1alpha2"
 kind: rule
 metadata:
   name: jwtauthorization
   namespace: istio-system
 spec:
-  match: destination.labels["app"] == "hp-company"
+  match: destination.labels["layer"] == "L1"
   actions:
   - handler: jwthandler.opa
     instances:
@@ -42,10 +18,14 @@ metadata:
   namespace: istio-system
 spec:
   subject:
-    user: source.uid | ""
+    user: request.auth.principal | ""
+    groups: request.auth.principal | ""
+    properties:
+      service: source.services | ""
+      namespace: source.namespace | ""
   action:
-    namespace: destination.namespace | "default"
-    service: destination.service | ""
+    namespace: destination.namespace | ""
+    service: destination.service.host | ""
     method: request.method | ""
     path: request.path | ""
     properties:
@@ -70,8 +50,8 @@ spec:
         count(blackItem) == 0
         }
       blacklist[signatures] {
-         response:=http.send({"method": "get", "url": "hp-oauth-service.hp/oauth/api/v1/blacklist/access"})
-         signatures=response.blacklist[_].signature
+         response:=http.send({"method": "get", "url": "http://hp-oauth-service.hp/oauth/api/v1/blacklist/access"})
+         signatures=response.body.blacklist[_].signature
        }
   checkMethod: "data.mixerauthz.allow"
   failClose: true
